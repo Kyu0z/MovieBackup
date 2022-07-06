@@ -64,7 +64,13 @@ namespace XemPhim
                 return;
             }
 
-            String username = signInManager.AuthenticationManager.User.Identity.Name;
+            ClaimsPrincipal claimsPrincipal = signInManager.AuthenticationManager.User;
+            if (claimsPrincipal == null)
+            {
+                context.SetError("invalid_claims", "Invalid session");
+                return;
+            }
+            String username = claimsPrincipal.Identity.Name;
             ApplicationUser user = dbContext.Users.Where(x => x.UserName == username).First();
 
             var identity = new ClaimsIdentity(context.Options.AuthenticationType);

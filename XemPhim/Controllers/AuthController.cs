@@ -1,7 +1,9 @@
-﻿using Microsoft.AspNet.Identity.Owin;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
-using System.Web;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
 using XemPhim.Interfaces.Auth;
 using XemPhim.Models;
 
@@ -13,19 +15,31 @@ namespace XemPhim.Controllers
         {
         }
 
-        protected ApplicationSignInManager getSignInManager()
+        public String PostLogin(LoginData data)
         {
-            return HttpContext.Current.GetOwinContext().Get<ApplicationSignInManager>();
+            return "Ok";
         }
 
-        public LoginResult PostLogin(LoginData data)
+        public async Task<LoginResult> PostLoginA(LoginData data)
         {
-            SignInStatus status = this.getSignInManager().PasswordSignIn(data.Username, data.Password, isPersistent: false, shouldLockout: false);
-            LoginResult result = new LoginResult();
-            switch (status)
+            HttpClient client = new HttpClient()
             {
-                case SignInStatus.Success:
-                    String username = this.getSignInManager().AuthenticationManager.User.Identity.Name;
+                BaseAddress = new Uri(Request.RequestUri.GetLeftPart(UriPartial.Authority))
+            };
+
+            FormUrlEncodedContent content = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("grant_type", "password"),
+                new KeyValuePair<string, string>("username", data.Username),
+                new KeyValuePair<string, string>("password", data.Password)
+            });
+
+            HttpResponseMessage tokenResult = await client.PostAsync("/api/auth/token", content);
+            LoginResult result = new LoginResult();
+            switch (tokenResult.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    String username = "";
                     result.Success = true;
                     result.Message = "Đăng nhập thành công";
                     ApplicationUser user = this.dbContext.Users.Where(x => x.UserName == username).First();
@@ -35,15 +49,12 @@ namespace XemPhim.Controllers
                         Token = TokenData.From(new AuthTokenManager(this.dbContext).CreateForUser(user)),
                     };
                     break;
-                case SignInStatus.LockedOut:
-                case SignInStatus.RequiresVerification:
-                case SignInStatus.Failure:
+                case HttpStatusCode.BadRequest:
+                    result.Message = String.Format("Đăng nhập thất bại với lỗi: {0}", "");
+                    break;
+                default:
                     result.Message = "Đăng nhập thất bại";
                     break;
-            }
-            if (result.Message == null)
-            {
-                result.Message = "Đăng nhập lỗi không xác định";
             }
             return result;
         }
