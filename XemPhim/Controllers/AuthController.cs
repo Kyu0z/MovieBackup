@@ -1,26 +1,33 @@
-﻿using System;
+﻿using Microsoft.AspNet.Identity;
+using Microsoft.AspNet.Identity.EntityFramework;
+using Microsoft.AspNet.Identity.Owin;
+using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Web;
+using System.Web.Http;
 using XemPhim.Interfaces.Auth;
+using XemPhim.Interfaces.OAuth;
 using XemPhim.Models;
 
 namespace XemPhim.Controllers
 {
+    [RoutePrefix("auth")]
+    [Authorize]
     public class AuthController : BaseApiController
     {
         public AuthController()
         {
         }
 
-        public String PostLogin(LoginData data)
-        {
-            return "Ok";
-        }
-
-        public async Task<LoginResult> PostLoginA(LoginData data)
+        [Route("login")]
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<LoginResult> PostLogin([FromBody] LoginData data)
         {
             HttpClient client = new HttpClient()
             {
@@ -35,28 +42,75 @@ namespace XemPhim.Controllers
             });
 
             HttpResponseMessage tokenResult = await client.PostAsync("/api/auth/token", content);
+            string tokenResultBody = await tokenResult.Content.ReadAsStringAsync();
+
             LoginResult result = new LoginResult();
             switch (tokenResult.StatusCode)
             {
                 case HttpStatusCode.OK:
-                    String username = "";
+                    OAuthToken oauthToken = JsonConvert.DeserializeObject<OAuthToken>(tokenResultBody);
                     result.Success = true;
                     result.Message = "Đăng nhập thành công";
-                    ApplicationUser user = this.dbContext.Users.Where(x => x.UserName == username).First();
+                    ApplicationUser user = this.dbContext.Users.Where(x => x.UserName == data.Username).First();
+                    RoleStore<IdentityRole> roleStore = new RoleStore<IdentityRole>(this.dbContext);
                     result.Data = new LoginResultData()
                     {
-                        User = UserData.From(user),
-                        Token = TokenData.From(new AuthTokenManager(this.dbContext).CreateForUser(user)),
+                        User = UserDataWithRole.From(user, roleStore),
+                        Token = oauthToken,
                     };
                     break;
                 case HttpStatusCode.BadRequest:
-                    result.Message = String.Format("Đăng nhập thất bại với lỗi: {0}", "");
+                    OAuthError oauthError = JsonConvert.DeserializeObject<OAuthError>(tokenResultBody);
+                    result.Message = "Đăng nhập thất bại";
+                    result.Error = oauthError;
                     break;
                 default:
-                    result.Message = "Đăng nhập thất bại";
+                    result.Message = "Lỗi hệ thống";
                     break;
             }
             return result;
+        }
+
+        [Route("register")]
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<RegisterResult> PostRegister([FromBody] RegisterData data)
+        {
+            ApplicationUserManager userManager = HttpContext.Current.GetOwinContext().GetUserManager<ApplicationUserManager>();
+            ApplicationUser user = new ApplicationUser
+            {
+                UserName = data.Username,
+                Email = data.Email,
+            };
+            IdentityResult registerResult = await userManager.CreateAsync(user, data.Password);
+
+            RegisterResult result = new RegisterResult();
+            if (registerResult.Succeeded)
+            {
+                result.Success = true;
+                result.Message = "Đăng ký thành công";
+            }
+            else
+            {
+                foreach (String error in registerResult.Errors)
+                {
+                    if (error != null)
+                    {
+                        result.Message = error;
+                    }
+                }
+            }
+            return result;
+        }
+
+        [Route("me")]
+        [HttpGet]
+        public UserData GetMe()
+        {
+            String username = HttpContext.Current.User.Identity.Name;
+            ApplicationUser user = this.dbContext.Users.Where(x => x.UserName == username).First();
+            RoleStore<IdentityRole> roleStore = new RoleStore<IdentityRole>(this.dbContext);
+            return UserDataWithRole.From(user, roleStore);
         }
     }
 }

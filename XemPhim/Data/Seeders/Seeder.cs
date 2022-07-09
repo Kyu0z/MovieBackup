@@ -1,5 +1,6 @@
 ﻿using System.Threading.Tasks;
 using XemPhim.Models;
+using XemPhim.Utils;
 
 namespace XemPhim.Data.Seeders
 {
@@ -19,9 +20,7 @@ namespace XemPhim.Data.Seeders
 
         public static DBContext GetDbContext()
         {
-            Task<DBContext> task = GetDbContextAsync();
-            task.Wait();
-            return task.Result;
+            return AsyncHelper.RunSync(() => GetDbContextAsync());
         }
 
         public override async Task Seed()

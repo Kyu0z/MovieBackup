@@ -52,33 +52,40 @@ namespace XemPhim
 
         public override async Task GrantResourceOwnerCredentials(OAuthGrantResourceOwnerCredentialsContext context)
         {
-            context.OwinContext.Response.Headers.Add("Access-Control-Allow-Origin", new[] { "*" });
+            if (context.Request.RemoteIpAddress != "::1")
+            {
+                context.SetError("invalid_scope", "API này chỉ được phép gọi nội bộ");
+                return;
+            }
 
             DBContext dbContext = await Seeder.GetDbContextAsync();
             ApplicationSignInManager signInManager = context.OwinContext.Get<ApplicationSignInManager>();
 
+            ApplicationUser user = dbContext.Users.Where(x => x.UserName == context.UserName).FirstOrDefault();
+            if (user == null)
+            {
+                context.SetError("invalid_username", "Tên đăng nhập không hợp lệ");
+                return;
+            }
+
             SignInStatus status = await signInManager.PasswordSignInAsync(context.UserName, context.Password, false, false);
             if (status != SignInStatus.Success)
             {
-                context.SetError("invalid_grant", String.Format("Login failed with status: {0}", status.ToString()));
+                String errorMessage = String.Format("Tài khoản của bạn đang ở trạng thái {0}", status.ToString());
+                if (status == SignInStatus.Failure)
+                {
+                    errorMessage = "Mật khẩu không hợp lệ";
+                }
+                context.SetError("invalid_grant", errorMessage);
                 return;
             }
 
-            ClaimsPrincipal claimsPrincipal = signInManager.AuthenticationManager.User;
-            if (claimsPrincipal == null)
-            {
-                context.SetError("invalid_claims", "Invalid session");
-                return;
-            }
-            String username = claimsPrincipal.Identity.Name;
-            ApplicationUser user = dbContext.Users.Where(x => x.UserName == username).First();
-
-            var identity = new ClaimsIdentity(context.Options.AuthenticationType);
-            identity.AddClaim(new Claim("sub", username));
+            ClaimsIdentity identity = new ClaimsIdentity(context.Options.AuthenticationType);
+            identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName));
             foreach (IdentityUserRole userRole in user.Roles)
             {
                 IdentityRole role = dbContext.Roles.Find(userRole.RoleId);
-                identity.AddClaim(new Claim("role", role.Name));
+                identity.AddClaim(new Claim(ClaimTypes.Role, role.Name));
             }
             foreach (IdentityUserClaim claim in user.Claims)
             {

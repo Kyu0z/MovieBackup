@@ -6,7 +6,7 @@ namespace XemPhim.Models
     {
         protected static DBContext sington;
 
-        public virtual DbSet<AuthToken> AuthTokens { get; set; }
+        public virtual DbSet<Movie> Movies { get; set; }
 
         public static new DBContext Create()
         {
