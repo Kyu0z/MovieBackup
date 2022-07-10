@@ -16,5 +16,12 @@ namespace XemPhim.Controllers
         {
             return this.dbContext.Movies.OrderBy(x => x.CreatedAt);
         }
+
+        [Route("test")]
+        [HttpGet]
+        public string Test()
+        {
+            return "Ok";
+        }
     }
 }

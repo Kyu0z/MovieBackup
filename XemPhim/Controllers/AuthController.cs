@@ -105,12 +105,23 @@ namespace XemPhim.Controllers
 
         [Route("me")]
         [HttpGet]
-        public UserData GetMe()
+        [AllowAnonymous]
+        public MeResult GetMe()
         {
-            String username = HttpContext.Current.User.Identity.Name;
-            ApplicationUser user = this.dbContext.Users.Where(x => x.UserName == username).First();
-            RoleStore<IdentityRole> roleStore = new RoleStore<IdentityRole>(this.dbContext);
-            return UserDataWithRole.From(user, roleStore);
+            MeResult result = new MeResult();
+            if (HttpContext.Current.User.Identity.IsAuthenticated)
+            {
+                result.Success = true;
+                result.Message = "Thành công";
+                String username = HttpContext.Current.User.Identity.Name;
+                ApplicationUser user = this.dbContext.Users.Where(x => x.UserName == username).First();
+                RoleStore<IdentityRole> roleStore = new RoleStore<IdentityRole>(this.dbContext);
+                result.Data = UserDataWithRole.From(user, roleStore);
+            } else
+            {
+                result.Message = "Bạn chưa đăng nhập hoặc token không hợp lệ";
+            }
+            return result;
         }
     }
 }
